@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>opus-mt · bitext console</title>
+<style>
+  :root {
+    --paper:   #e8e9e3;
+    --panel:   #f3f4ef;
+    --ink:     #1b2432;
+    --ink-mid: #5a6675;
+    --rule:    #c9ccc2;
+    --mark:    #f2c230;
+    --live:    #2e6f5e;
+    --alarm:   #a63d2f;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:   #14181c;
+      --panel:   #1b2026;
+      --ink:     #dfe3e0;
+      --ink-mid: #8c98a4;
+      --rule:    #2f373f;
+      --mark:    #6b5410;
+      --live:    #5fbfa3;
+      --alarm:   #e08272;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0 1.25rem 4rem;
+    background: var(--paper); color: var(--ink);
+    font-family: var(--sans); font-size: 15px; line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  /* --- masthead --- */
+  header { padding: 2.5rem 0 1.25rem; border-bottom: 1px solid var(--rule); }
+  .pair {
+    font-family: var(--mono); font-size: 2.4rem; font-weight: 600;
+    letter-spacing: -0.04em; margin: 0; line-height: 1;
+  }
+  .pair .arrow { color: var(--ink-mid); margin: 0 .35rem; }
+  .pair .tgt { color: var(--ink-mid); }
+  .tagline { color: var(--ink-mid); margin: .6rem 0 0; max-width: 46ch; }
+  .status {
+    display: flex; gap: 1.25rem; flex-wrap: wrap; align-items: center;
+    font-family: var(--mono); font-size: .72rem; text-transform: uppercase;
+    letter-spacing: .09em; color: var(--ink-mid); margin-top: 1.25rem;
+  }
+  .dot {
+    display: inline-block; width: .5rem; height: .5rem; border-radius: 50%;
+    background: var(--ink-mid); margin-right: .45rem; vertical-align: baseline;
+  }
+  .dot.up { background: var(--live); }
+  .dot.down { background: var(--alarm); }
+
+  /* --- source --- */
+  .source { margin-top: 1.75rem; }
+  .label {
+    font-family: var(--mono); font-size: .72rem; text-transform: uppercase;
+    letter-spacing: .09em; color: var(--ink-mid);
+    display: flex; justify-content: space-between; align-items: baseline; gap: 1rem;
+  }
+  textarea {
+    width: 100%; min-height: 8.5rem; margin-top: .5rem; padding: .9rem 1rem;
+    background: var(--panel); color: var(--ink); border: 1px solid var(--rule);
+    border-radius: 2px; font-family: var(--sans); font-size: 1rem; line-height: 1.6;
+    resize: vertical;
+  }
+  textarea:focus-visible, button:focus-visible, input:focus-visible {
+    outline: 2px solid var(--ink); outline-offset: 2px;
+  }
+  .controls {
+    display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin-top: .75rem;
+  }
+  button {
+    font-family: var(--mono); font-size: .8rem; letter-spacing: .04em;
+    padding: .55rem 1.1rem; border-radius: 2px; cursor: pointer;
+    border: 1px solid var(--ink); background: var(--ink); color: var(--paper);
+  }
+  button:disabled { opacity: .45; cursor: default; }
+  button.ghost { background: transparent; color: var(--ink); }
+  .hint { font-family: var(--mono); font-size: .72rem; color: var(--ink-mid); }
+  input[type=password] {
+    font-family: var(--mono); font-size: .8rem; padding: .5rem .6rem;
+    background: var(--panel); border: 1px solid var(--rule); border-radius: 2px;
+    color: var(--ink); width: 13rem;
+  }
+  .hidden { display: none !important; }
+
+  /* --- results --- */
+  .grid {
+    display: grid; gap: 1px; margin-top: 2rem;
+    background: var(--rule); border: 1px solid var(--rule);
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+  .cell { background: var(--panel); padding: 1rem 1.1rem 1.2rem; }
+  .cell header {
+    padding: 0; border: 0; display: flex; justify-content: space-between;
+    align-items: baseline; gap: .75rem; margin-bottom: .6rem;
+  }
+  .lang {
+    font-family: var(--mono); font-size: .95rem; font-weight: 600;
+    letter-spacing: .12em; text-transform: uppercase;
+  }
+  .meta { font-family: var(--mono); font-size: .7rem; color: var(--ink-mid); }
+  .copy {
+    border: 0; background: none; color: var(--ink-mid); padding: 0;
+    font-family: var(--mono); font-size: .7rem; text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+  .copy:hover { color: var(--ink); }
+  .body { white-space: pre-wrap; }
+
+  /* --- signature: cross-language sentence alignment --- */
+  .seg { border-radius: 1px; transition: background-color .12s ease; cursor: default; }
+  .seg.on { background: var(--mark); }
+  @media (prefers-reduced-motion: reduce) { .seg { transition: none; } }
+
+  .empty { color: var(--ink-mid); font-family: var(--mono); font-size: .8rem; }
+  .error {
+    margin-top: 1.5rem; padding: .8rem 1rem; border-left: 3px solid var(--alarm);
+    background: var(--panel); font-family: var(--mono); font-size: .8rem;
+  }
+  footer {
+    margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--rule);
+    font-family: var(--mono); font-size: .72rem; color: var(--ink-mid);
+  }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1 class="pair"><span>it</span><span class="arrow">→</span><span class="tgt" id="pairTargets">…</span></h1>
+    <p class="tagline">Opus-MT on CPU. Hover any sentence to see how it lines up across the four targets — that alignment is the segmentation this service runs before every translation.</p>
+    <div class="status">
+      <span><span class="dot" id="dot"></span><span id="statusText">checking</span></span>
+      <span id="loadedText">resident: —</span>
+      <span id="limitText"></span>
+    </div>
+  </header>
+
+  <section class="source">
+    <div class="label">
+      <span>Italian source</span>
+      <span id="counter">0</span>
+    </div>
+    <textarea id="src" spellcheck="false" placeholder="Incolla il testo italiano da tradurre…"></textarea>
+    <div class="controls">
+      <button id="go">Translate</button>
+      <button class="ghost" id="sample">Load sample</button>
+      <input type="password" id="key" class="hidden" placeholder="X-API-Key" autocomplete="off">
+      <span class="hint" id="shortcut">⌘/Ctrl + Enter</span>
+    </div>
+  </section>
+
+  <div id="err" class="error hidden"></div>
+
+  <section class="grid" id="grid"></section>
+
+  <footer>
+    <a href="/docs">API docs</a> · <a href="/health">health</a> ·
+    <span id="footNote">POST /translate {"text": "...", "targets": ["de"]}</span>
+  </footer>
+
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const src = $('src'), grid = $('grid'), go = $('go'), err = $('err');
+  let cfg = { targets: [], auth_required: false, max_chars: 20000, rate_limit_rpm: 0 };
+
+  const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+  // --- config + health ---------------------------------------------------
+  fetch('/config').then(r => r.json()).then(c => {
+    cfg = c;
+    $('pairTargets').textContent = c.targets.join(' · ');
+    if (c.auth_required) $('key').classList.remove('hidden');
+    if (c.rate_limit_rpm > 0) $('limitText').textContent = `limit: ${c.rate_limit_rpm}/min`;
+    $('counter').textContent = `0 / ${c.max_chars}`;
+    renderEmpty();
+  }).catch(() => showError('Could not reach /config — is the service up?'));
+
+  const pollHealth = () => fetch('/health').then(r => r.json()).then(h => {
+    $('dot').className = 'dot up';
+    $('statusText').textContent = 'live';
+    $('loadedText').textContent = h.loaded.length
+      ? `resident: ${h.loaded.join(' ')}`
+      : 'resident: none (cold)';
+  }).catch(() => {
+    $('dot').className = 'dot down';
+    $('statusText').textContent = 'unreachable';
+  });
+  pollHealth();
+  setInterval(pollHealth, 30000);
+
+  // --- rendering ---------------------------------------------------------
+  function renderEmpty() {
+    grid.innerHTML = cfg.targets.map(t => `
+      <div class="cell">
+        <header><span class="lang">${t}</span><span class="meta">—</span></header>
+        <div class="empty">awaiting source</div>
+      </div>`).join('');
+  }
+
+  function segHtml(list) {
+    return list.map((s, i) => `<span class="seg" data-seg="${i}">${esc(s)}</span>`).join(' ');
+  }
+
+  function render(data) {
+    const cells = [`
+      <div class="cell">
+        <header>
+          <span class="lang">it</span>
+          <span class="meta">source · ${data.sentences} seg</span>
+        </header>
+        <div class="body">${segHtml(data.source_segments)}</div>
+      </div>`];
+
+    for (const t of Object.keys(data.segments)) {
+      cells.push(`
+        <div class="cell">
+          <header>
+            <span class="lang">${t}</span>
+            <button class="copy" data-copy="${t}">copy</button>
+          </header>
+          <div class="body">${segHtml(data.segments[t])}</div>
+        </div>`);
+    }
+    grid.innerHTML = cells.join('');
+
+    grid.querySelectorAll('.copy').forEach(b => b.addEventListener('click', () => {
+      navigator.clipboard.writeText(data.translations[b.dataset.copy]).then(() => {
+        b.textContent = 'copied';
+        setTimeout(() => (b.textContent = 'copy'), 1200);
+      });
+    }));
+  }
+
+  // Signature interaction: one delegated listener highlights the same sentence
+  // index in every language at once.
+  const mark = (i, on) => grid.querySelectorAll(`.seg[data-seg="${i}"]`)
+    .forEach(el => el.classList.toggle('on', on));
+  let current = null;
+  grid.addEventListener('mouseover', e => {
+    const seg = e.target.closest('.seg');
+    const i = seg ? seg.dataset.seg : null;
+    if (i === current) return;
+    if (current !== null) mark(current, false);
+    current = i;
+    if (i !== null) mark(i, true);
+  });
+  grid.addEventListener('mouseleave', () => {
+    if (current !== null) mark(current, false);
+    current = null;
+  });
+
+  // --- actions -----------------------------------------------------------
+  function showError(msg) { err.textContent = msg; err.classList.remove('hidden'); }
+  function clearError() { err.classList.add('hidden'); }
+
+  src.addEventListener('input', () => {
+    $('counter').textContent = `${src.value.length} / ${cfg.max_chars}`;
+  });
+
+  async function translate() {
+    const text = src.value.trim();
+    if (!text) { src.focus(); return; }
+    clearError();
+    go.disabled = true; go.textContent = 'translating…';
+    const t0 = performance.now();
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (cfg.auth_required) headers['X-API-Key'] = $('key').value;
+      const res = await fetch('/translate', {
+        method: 'POST', headers,
+        body: JSON.stringify({ text, targets: cfg.targets, segments: true })
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(`${res.status} — ${detail.detail || res.statusText}`);
+      }
+      const data = await res.json();
+      render(data);
+      const rtt = Math.round(performance.now() - t0);
+      $('footNote').textContent =
+        `${data.sentences} sentences · ${data.ms} ms translating · ${rtt} ms round trip`;
+      pollHealth();
+    } catch (e) {
+      showError(e.message);
+    } finally {
+      go.disabled = false; go.textContent = 'Translate';
+    }
+  }
+
+  go.addEventListener('click', translate);
+  src.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') translate();
+  });
+
+  $('sample').addEventListener('click', () => {
+    src.value = "Il contratto decorre dal primo gennaio e si rinnova tacitamente. "
+      + "Il Sig. Rossi ha firmato ieri, come previsto dall'art. 12 del regolamento.\n\n"
+      + "La Acme S.r.l. subentra nella fornitura a partire dal 2027. "
+      + "Ogni modifica dovrà essere concordata per iscritto.";
+    src.dispatchEvent(new Event('input'));
+    src.focus();
+  });
+})();
+</script>
+</body>
+</html>
