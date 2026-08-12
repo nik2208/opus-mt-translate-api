@@ -1,0 +1,26 @@
+services:
+  opus-mt:
+    build:
+      context: .
+      args:
+        TARGETS: "en fr es de"
+    image: opus-mt:local
+    container_name: opus-mt
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"   # bound to loopback: expose via your reverse proxy
+    environment:
+      IDLE_TTL: "300"           # unload a language after 5 min idle; 0 = never
+      INTER_THREADS: "2"        # concurrent requests
+      INTRA_THREADS: "1"        # threads inside a single translation
+      BEAM_SIZE: "2"            # 1 = faster, 4 = marginally better
+    # Hard caps: if anything misbehaves, this container gets killed —
+    # not the services you actually care about.
+    mem_limit: 900m
+    memswap_limit: 900m         # deny swap: swapping inference stalls, not slows
+    cpus: 2.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
