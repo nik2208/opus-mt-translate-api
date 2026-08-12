@@ -34,10 +34,14 @@ RUN pip install --no-cache-dir \
       "uvicorn[standard]==0.34.0"
 
 COPY --from=converter /models /models
+# The test page ships in the image but is only served when ENABLE_UI=true.
+# It is ~12 KB of static HTML, so there is no separate build for the API-only case.
 COPY app /app
 
 ENV MODEL_DIR=/models \
+    STATIC_DIR=/app/static \
     TARGETS=en,fr,es,de \
+    ENABLE_UI=false \
     IDLE_TTL=300 \
     INTER_THREADS=2 \
     INTRA_THREADS=1 \
