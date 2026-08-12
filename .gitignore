@@ -1,0 +1,21 @@
+# models are built into the image, never committed
+models/
+*.bin
+*.spm
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# local overrides
+docker-compose.override.yml
+.env
+
+# editors / os
+.vscode/
+.idea/
+.DS_Store
