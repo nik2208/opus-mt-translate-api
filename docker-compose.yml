@@ -3,22 +3,41 @@ services:
     build:
       context: .
       args:
-        TARGETS: "en fr es de"
+        TARGETS: "${TARGETS_BUILD:-en fr es de}"
     image: opus-mt:local
     container_name: opus-mt
     restart: unless-stopped
+
+    # Coolify routes through its own proxy and ignores published ports.
+    # Everywhere else this is how you reach the service.
     ports:
-      - "127.0.0.1:8000:8000"   # bound to loopback: expose via your reverse proxy
+      - "${BIND_HOST:-127.0.0.1}:${PORT:-8000}:8000"
+
     environment:
-      IDLE_TTL: "300"           # unload a language after 5 min idle; 0 = never
-      INTER_THREADS: "2"        # concurrent requests
-      INTRA_THREADS: "1"        # threads inside a single translation
-      BEAM_SIZE: "2"            # 1 = faster, 4 = marginally better
+      # test page: off by default, so the image is API-only unless asked
+      ENABLE_UI: "${ENABLE_UI:-false}"
+      # access control
+      API_KEY: "${API_KEY:-}"
+      RATE_LIMIT_RPM: "${RATE_LIMIT_RPM:-20}"
+      MAX_CONCURRENT: "${MAX_CONCURRENT:-4}"
+      TRUST_PROXY: "${TRUST_PROXY:-false}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-}"
+      # engine
+      TARGETS: "${TARGETS:-en,fr,es,de}"
+      IDLE_TTL: "${IDLE_TTL:-300}"
+      INTER_THREADS: "${INTER_THREADS:-2}"
+      INTRA_THREADS: "${INTRA_THREADS:-1}"
+      BEAM_SIZE: "${BEAM_SIZE:-2}"
+      MAX_CHARS: "${MAX_CHARS:-20000}"
+      # Coolify: uncomment to have the domain generated and TLS wired up.
+      # - SERVICE_FQDN_OPUSMT_8000
+
     # Hard caps: if anything misbehaves, this container gets killed —
     # not the services you actually care about.
     mem_limit: 900m
     memswap_limit: 900m         # deny swap: swapping inference stalls, not slows
     cpus: 2.0
+
     logging:
       driver: json-file
       options:
