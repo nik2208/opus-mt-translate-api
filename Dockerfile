@@ -6,15 +6,15 @@
 # ctranslate2 4.5.0 here (see the version note below).
 FROM python:3.12-slim-trixie AS converter
 
-# ctranslate2 must be >= 4.6.0. The 4.5.0 wheel ships a shared object marked
+# These two versions must move together — see VERSION PAIRING at the bottom.
+#
+# ctranslate2 must be >= 4.6.0: the 4.5.0 wheel ships a shared object marked
 # as requiring an executable stack, which glibc 2.41+ (Debian trixie) refuses
-# to load:
-#   ImportError: libctranslate2-*.so.4.5.0: cannot enable executable stack
-# Upstream cleared the flag in 4.6.0 — verified with readelf: 4.5.0 is RWE,
-# 4.6.0+ is RW.
+# to load ("cannot enable executable stack"). Upstream cleared the flag in
+# 4.6.0 — verified with readelf: 4.5.0 is RWE, 4.6.0+ is RW.
 RUN pip install --no-cache-dir \
       ctranslate2==4.8.1 \
-      transformers==4.46.3 \
+      transformers==4.57.1 \
       sentencepiece==0.2.0 \
       torch==2.5.1 --extra-index-url https://download.pytorch.org/whl/cpu
 
@@ -37,7 +37,7 @@ FROM python:3.12-slim-trixie
 
 RUN pip install --no-cache-dir \
       ctranslate2==4.8.1 \
-      transformers==4.46.3 \
+      transformers==4.57.1 \
       sentencepiece==0.2.0 \
       fastapi==0.115.6 \
       "uvicorn[standard]==0.34.0"
@@ -63,3 +63,15 @@ HEALTHCHECK --interval=60s --timeout=5s --start-period=20s \
 # One worker only: CTranslate2 handles concurrency internally via inter_threads,
 # and extra uvicorn workers would each load their own copy of the models.
 CMD ["uvicorn", "main:app", "--app-dir", "/app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+
+# ---------- VERSION PAIRING ----------
+# transformers renamed the from_pretrained kwarg torch_dtype -> dtype in 4.56,
+# and ctranslate2's converter follows whichever name was current when it was
+# built. Mixing eras gives:
+#   TypeError: MarianMTModel.__init__() got an unexpected keyword argument 'dtype'
+# because the unrecognised kwarg falls through to the model constructor.
+#
+# Only pair versions from the same era:
+#   ctranslate2 >= 4.6.3    with transformers >= 4.56   <- used here
+#   ctranslate2 4.6.0-4.6.2 with transformers <  4.56   <- fallback
+# ctranslate2 <= 4.5.x is out regardless: executable-stack bug above.
