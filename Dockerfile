@@ -1,22 +1,22 @@
 # ---------- stage 1: convert the models ----------
 # Done at build time so the runtime container never needs network access
 # and the image is fully reproducible.
-# Base tags pinned to a Debian release on purpose: the bare python:3.12-slim
-# tag moves between Debian versions, and a glibc bump is exactly what broke
-# ctranslate2 4.5.0 here (see the version note below).
+# Base tags name a Debian release on purpose: the bare python:3.12-slim tag
+# moves between Debian versions, and a glibc bump is exactly what broke
+# ctranslate2 4.5.0 here (see VERSION PAIRING at the bottom).
 FROM python:3.12-slim-trixie AS converter
 
-# These two versions must move together — see VERSION PAIRING at the bottom.
-#
-# ctranslate2 must be >= 4.6.0: the 4.5.0 wheel ships a shared object marked
-# as requiring an executable stack, which glibc 2.41+ (Debian trixie) refuses
-# to load ("cannot enable executable stack"). Upstream cleared the flag in
-# 4.6.0 — verified with readelf: 4.5.0 is RWE, 4.6.0+ is RW.
+# torch first, from the CPU-only index. --index-url and not --extra-index-url:
+# the latter lets pip resolve torch from PyPI instead, dragging in ~2.5 GB of
+# CUDA wheels this image never uses.
+RUN pip install --no-cache-dir \
+      --index-url https://download.pytorch.org/whl/cpu \
+      torch==2.8.0
+
 RUN pip install --no-cache-dir \
       ctranslate2==4.8.1 \
       transformers==4.57.1 \
-      sentencepiece==0.2.0 \
-      torch==2.5.1 --extra-index-url https://download.pytorch.org/whl/cpu
+      sentencepiece==0.2.0
 
 ARG TARGETS="en fr es de"
 RUN set -eux; \
@@ -65,13 +65,30 @@ HEALTHCHECK --interval=60s --timeout=5s --start-period=20s \
 CMD ["uvicorn", "main:app", "--app-dir", "/app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 
 # ---------- VERSION PAIRING ----------
-# transformers renamed the from_pretrained kwarg torch_dtype -> dtype in 4.56,
-# and ctranslate2's converter follows whichever name was current when it was
-# built. Mixing eras gives:
-#   TypeError: MarianMTModel.__init__() got an unexpected keyword argument 'dtype'
-# because the unrecognised kwarg falls through to the model constructor.
+# The converter stage is a three-way constraint. Change one pin and you have to
+# check the other two, or the build breaks in ways that look unrelated.
 #
-# Only pair versions from the same era:
-#   ctranslate2 >= 4.6.3    with transformers >= 4.56   <- used here
-#   ctranslate2 4.6.0-4.6.2 with transformers <  4.56   <- fallback
-# ctranslate2 <= 4.5.x is out regardless: executable-stack bug above.
+# 1. ctranslate2 >= 4.6.0
+#    The 4.5.0 wheel ships a shared object marked as requiring an executable
+#    stack, and glibc 2.41+ (Debian trixie) refuses to load it:
+#      ImportError: cannot enable executable stack as shared object requires
+#    Verified with readelf: 4.5.0 is RWE, 4.6.0+ is RW.
+#
+# 2. ctranslate2 and transformers must be from the same era
+#    transformers renamed the from_pretrained kwarg torch_dtype -> dtype in
+#    4.56, and the converter passes whichever name was current when it was
+#    built. Mismatched, the kwarg falls through to the model constructor:
+#      TypeError: MarianMTModel.__init__() got an unexpected keyword 'dtype'
+#    ctranslate2 4.6.0-4.6.2 pass torch_dtype; 4.6.3+ pass dtype.
+#
+# 3. torch >= 2.6 whenever transformers >= 4.56
+#    transformers gates torch.load behind a torch version check
+#    (CVE-2025-32434). The Opus-MT checkpoints are .bin, not safetensors, so
+#    that load path is unavoidable and an older torch fails with:
+#      ValueError: ... we now require users to upgrade torch to at least v2.6
+#
+# Working combinations:
+#   ctranslate2 4.8.1  + transformers 4.57.1 + torch 2.8.0   <- used here
+#   ctranslate2 4.6.2  + transformers 4.46.3 + torch 2.5.1   <- older fallback
+#
+# torch only exists in this stage. The runtime image has no torch at all.
