@@ -1,10 +1,19 @@
 # ---------- stage 1: convert the models ----------
 # Done at build time so the runtime container never needs network access
 # and the image is fully reproducible.
-FROM python:3.12-slim AS converter
+# Base tags pinned to a Debian release on purpose: the bare python:3.12-slim
+# tag moves between Debian versions, and a glibc bump is exactly what broke
+# ctranslate2 4.5.0 here (see the version note below).
+FROM python:3.12-slim-trixie AS converter
 
+# ctranslate2 must be >= 4.6.0. The 4.5.0 wheel ships a shared object marked
+# as requiring an executable stack, which glibc 2.41+ (Debian trixie) refuses
+# to load:
+#   ImportError: libctranslate2-*.so.4.5.0: cannot enable executable stack
+# Upstream cleared the flag in 4.6.0 — verified with readelf: 4.5.0 is RWE,
+# 4.6.0+ is RW.
 RUN pip install --no-cache-dir \
-      ctranslate2==4.5.0 \
+      ctranslate2==4.8.1 \
       transformers==4.46.3 \
       sentencepiece==0.2.0 \
       torch==2.5.1 --extra-index-url https://download.pytorch.org/whl/cpu
@@ -24,10 +33,10 @@ transformers.AutoTokenizer.from_pretrained('Helsinki-NLP/opus-mt-it-'+sys.argv[1
 # ---------- stage 2: runtime ----------
 # torch is NOT installed here — CTranslate2 runs standalone, which keeps the
 # final image around 700 MB instead of ~4 GB.
-FROM python:3.12-slim
+FROM python:3.12-slim-trixie
 
 RUN pip install --no-cache-dir \
-      ctranslate2==4.5.0 \
+      ctranslate2==4.8.1 \
       transformers==4.46.3 \
       sentencepiece==0.2.0 \
       fastapi==0.115.6 \
